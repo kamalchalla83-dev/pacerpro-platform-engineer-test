@@ -5,10 +5,6 @@ provider "aws" {
 resource "aws_instance" "app" {
   ami           = "ami-0c02fb55956c7d316"
   instance_type = "t3.micro"
-
-  tags = {
-    Name = "pacerpro-app"
-  }
 }
 
 resource "aws_sns_topic" "alerts" {
@@ -16,7 +12,7 @@ resource "aws_sns_topic" "alerts" {
 }
 
 resource "aws_iam_role" "lambda_role" {
-  name = "lambda-remediation-role"
+  name = "auto-remediate-latency-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -28,12 +24,29 @@ resource "aws_iam_role" "lambda_role" {
   })
 }
 
-resource "aws_lambda_function" "remediation" {
+resource "aws_iam_role_policy_attachment" "basic_logs" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "ec2" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "sns" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSNSFullAccess"
+}
+
+resource "aws_lambda_function" "auto_remediate" {
   function_name = "auto-remediate-latency"
-  runtime       = "python3.10"
-  handler       = "lambda_function.lambda_handler"
   role          = aws_iam_role.lambda_role.arn
-  filename      = "lambda.zip"
+  handler       = "lambda_function.lambda_handler"
+  runtime       = "python3.10"
+
+  filename         = "lambda.zip"
+  source_code_hash = filebase64sha256("lambda.zip")
 
   environment {
     variables = {
